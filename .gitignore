@@ -17,3 +17,4 @@ build/
 DerivedData/
 *.app
 testImages/
+bin/data/NeueHaasUnicaPro-Regular.ttf
