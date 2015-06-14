@@ -1,0 +1,5 @@
+ofxGui
+ofxNetwork
+ofxXmlSettings
+ofxAnimatable
+ofxJSON
