@@ -17,7 +17,7 @@ void prVictim::setup(string _name, float _signal)
 {
     name = _name;
     signal = _signal;
-    fontSize = 20;
+    fontSize = 32;
     
     animColor.setColor( ofColor::black );
     animColor.setDuration( 0.3f );
@@ -57,7 +57,7 @@ void prVictim::update(float _minSig, float _maxSig, float _minHue, float _maxHue
     minHue = _minHue;
     maxHue = _maxHue;
     
-    angle = angle + 0.02;
+    angle = angle >= 360 ? 0 + 0.02 : angle + 0.02;
     calculatePosition();
     
     fontOpacity.update( 1.0f/60.0f );
@@ -86,11 +86,11 @@ void prVictim::draw()
     
     float z = 0;
     if (signal > 80){
-        z = -300;
+        z = -400; // 300
     } else if (signal < 80 && signal > 40) {
-        z = -150;
+        z = -250; // 150
     } else if (signal < 40 && signal > 20) {
-        z = -25;
+        z = -75; // 25
     } else if (signal < 20 && signal > 0) {
         z = 0;
     }
@@ -138,7 +138,6 @@ void prVictim::calculatePosition()
 }
 
 
-// TODO: ipv raius een schaal berekenen
 float prVictim::calculateScaleFromSignal(float signal)
 {
     return ( 1 / (maxSig - minSig) ) * (signal - 30);

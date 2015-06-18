@@ -30,16 +30,8 @@ void ofApp::setup()
     backgroundColor.setHsb( initialHue, 255, 0 );
     lastMacAdress = "ff:ff:ff:ff:ff:ff";
     lastSSID = "";
+    
     //blacklist.push_back("18:0c:ac:12:36:ed"); // Blijft maar om BJNSETUP roepen
-    
-    
-    prVictim victim;
-    victim.setup("Font test", 66);
-    victim.newProbeRequest("Searched for Unica", 66);
-    std::pair<string, prVictim> victimMacAddressPair;
-    victimMacAddressPair = std::make_pair("ff:ff:ff:ff:ff:xx", victim);
-    victims.push_back( victimMacAddressPair );
-    ofLogNotice("ofApp") << "created a victim";
     
     // SET UP THE GUI
     hideGUI = false;
@@ -76,12 +68,14 @@ void ofApp::update()
     string signal = probeRequestIn.getSignal();
     string host = hostNames.resolveName(macAddress);
     string ssid = (SSID.empty() || ofToString(SSID[0]) == ")") ? "something" : SSID;
+    float hue = hueFromSignalStrength(ofToFloat( signal ));
+    int volume = volumeFromSignalStrength(ofToFloat( signal ));
     
     if (lastTimestamp != timestamp && isNotInBlacklist(macAddress)) {
         vector< pair <string, prVictim> >::iterator victimMacAddressPair = std::find_if( victims.begin(), victims.end(), VictimExists(macAddress) );
-        if (victimMacAddressPair != victims.end()) {
+        if (victimMacAddressPair != victims.end() && useProbeRequestVictimList) {
             victimMacAddressPair->second.newProbeRequest(ssid, ofToFloat( signal ));
-        } else {
+        } else if (useProbeRequestVictimList) {
             prVictim victim;
             victim.setup(host, ofToFloat( signal ));
             victim.newProbeRequest(ssid, ofToFloat( signal ));
@@ -89,29 +83,41 @@ void ofApp::update()
             victimMacAddressPair = std::make_pair(macAddress, victim);
             victims.push_back( victimMacAddressPair );
         }
+        
+        if (useSingleProbeRequest) {
+            prSingleProbeRequest singleProbeRequest;
+            singleProbeRequest.setup(ssid, ofToFloat( signal ), minSig, maxSig, minHue, maxHue);
+            singleProbeRequests.push_back(singleProbeRequest);
+        }
+        
+        if (useProbeRequestPing) {
+            prProbeRequestPing ping;
+            ping.setup(ofToFloat( signal ), minSig, maxSig, minHue, maxHue);
+            pings.push_back(ping);
+        }
+        
+        http.POST("/emit/color", "color="+ofToString(hue) );
+        backgroundHue.animateTo(hue);
+        
+        speak.volume = mute ? 0 : volume;
+        speak.line = host +" searched for, "+ ssid + "?";
+        speak.timestamp = timestamp;
+        
         lastTimestamp = timestamp;
     }
     
     if ( lastSSID != SSID && isNotInBlacklist(macAddress) ) { // TODO: if (newData) ... && Is not in blacklist
         ofLogNotice("ofApp") << SSID +
-                ", with mac: "+ BSSID +
-                "/"+ DA +
-                " probed for by: "+ macAddress +
-                ", on: "+ timestamp +
-                ", signal: "+ signal;
-    
-        float hue = hueFromSignalStrength(ofToFloat( signal ));
-        int volume = volumeFromSignalStrength(ofToFloat( signal ));
+        ", with mac: "+ BSSID +
+        "/"+ DA +
+        " probed for by: "+ macAddress +
+        ", on: "+ timestamp +
+        ", signal: "+ signal;
         
         string saveData = makeSendableData(macAddress, SSID, BSSID, DA, signal, ofToString(volume), ofToString(hue),  timestamp);
+        ofLogNotice("ofApp") << "SaveData: " << saveData;
         http.POST("/api/victims", saveData);
-        http.POST("/emit/color", "color="+ofToString(hue) );
-       
-        speak.volume = mute ? 0 : volume;
-        speak.line = host +" searched for, "+ ssid + "?";
-
-        backgroundHue.animateTo(hue);
-    
+        
         lastSSID = SSID;
     }
     
@@ -120,6 +126,22 @@ void ofApp::update()
             victims.erase(victims.begin() + i);
         } else {
             victims.at(i).second.update(minSig, maxSig, minHue, maxHue);
+        }
+    }
+    
+    for (int i=0; i < singleProbeRequests.size(); i++) {
+        if (singleProbeRequests.at(i).finished) {
+            singleProbeRequests.erase(singleProbeRequests.begin() + i);
+        } else {
+            singleProbeRequests.at(i).update(minSig, maxSig, minHue, maxHue);
+        }
+    }
+    
+    for (int i=0; i < pings.size(); i++) {
+        if (pings.at(i).finished) {
+            pings.erase(pings.begin() + i);
+        } else {
+            pings.at(i).update();
         }
     }
     
@@ -132,6 +154,7 @@ void ofApp::update()
 void ofApp::draw()
 {
     if (!hideGUI) {
+        ofSetColor(ofColor::white);
         string SSID = probeRequestIn.getSSID();
         string ssid = (SSID.empty() || ofToString(SSID[0]) == ")") ? "something" : SSID;
         ofDrawBitmapString("Got probe request for; SSID: " + ssid +" mac: "+ probeRequestIn.getBSSID() +"/"+ probeRequestIn.getDA(), 20, 30);
@@ -150,6 +173,14 @@ void ofApp::draw()
     
     for (int i=0; i < victims.size(); i++) {
         victims.at(i).second.draw();
+    }
+    
+    for (int i=0; i < singleProbeRequests.size(); i++) {
+        singleProbeRequests.at(i).draw();
+    }
+    
+    for (int i=0; i < pings.size(); i++) {
+        pings.at(i).draw();
     }
 }
 
@@ -175,7 +206,7 @@ string ofApp::makeSendableData(string macAddress, string SSID, string BSSID, str
     // Check if SSID and append
     if (!SSID.empty()) saveData.append("ssidName="+ SSID +"&");
     // Check if Device destination and log TODO: make smarter to detect if DSSID or DA has the mac addr and append
-    if ( (!BSSID.empty() && BSSID != "BSSID:Broadcast") || (!DA.empty() && DA != "DA:Broadcast") ) {
+    if ( (!BSSID.empty() && BSSID != "FF:FF:FF:FF:FF:FF") || (!DA.empty() && DA != "FF:FF:FF:FF:FF:FF") ) {
         if (!BSSID.empty()) {
             saveData.append("ssidMacAddress="+ BSSID +"&");
         }
@@ -251,9 +282,17 @@ void ofApp::setupGUI()
     gui->addSlider("MAXVOL", 1, 7, maxVol);
     gui->addSlider("MINVOL", 1, 7, minVol);
     gui->addToggle("MUTE", false);
+    gui->addSpacer();
     
     gui->addLabel("Voice Controls");
     gui->addToggle("USE SECOND VOICE", false);
+    gui->addSpacer();
+    
+    gui->addLabel("Visualisation type");
+    gui->addToggle("USE PROBE REQUEST VICTIM LIST", true);
+    gui->addToggle("USE SINGLE PROBE REQUEST", false);
+    gui->addToggle("USE PROBE REQUEST PING", false);
+    //gui->addSpacer();
     
     gui->autoSizeToFitWidgets();
     ofAddListener(gui->newGUIEvent,this,&ofApp::guiEvent);
@@ -311,6 +350,21 @@ void ofApp::guiEvent(ofxUIEventArgs &event)
     else if (name == "USE SECOND VOICE") {
         ofxUIToggle *toggle = (ofxUIToggle *) event.getToggle();
         useSecondVoice = toggle->getValue();
+    }
+    
+    else if (name == "USE SINGLE PROBE REQUEST") {
+        ofxUIToggle *toggle = (ofxUIToggle *) event.getToggle();
+        useSingleProbeRequest = toggle->getValue();
+    }
+    
+    else if (name == "USE PROBE REQUEST VICTIM LIST") {
+        ofxUIToggle *toggle = (ofxUIToggle *) event.getToggle();
+        useProbeRequestVictimList = toggle->getValue();
+    }
+    
+    else if (name == "USE PROBE REQUEST PING") {
+        ofxUIToggle *toggle = (ofxUIToggle *) event.getToggle();
+        useProbeRequestPing = toggle->getValue();
     }
 }
 

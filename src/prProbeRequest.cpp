@@ -12,8 +12,8 @@ prProbeRequest::prProbeRequest(string _name, float _x, float _y, int _index)
 {
     name = _name;
     finished = false;
-    fontSize = 20;
-    lineHeight = 28;
+    fontSize = 32;
+    lineHeight = 42;
     
     fontOpacity.reset( 255 );
     fontOpacity.setRepeatType( PLAY_ONCE );

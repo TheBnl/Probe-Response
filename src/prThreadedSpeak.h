@@ -17,6 +17,7 @@ class prThreadedSpeak: public ofThread {
 public:
     string line;
     string voice;
+    string timestamp;
     int volume;
     bool speaking;
     
@@ -34,6 +35,7 @@ public:
     void start()
     {
         ofThread::startThread();
+        ofLogNotice("prThreadedApeak") << "Starting speak thread!";
     }
 
     
@@ -44,6 +46,7 @@ public:
     void stop()
     {
         ofThread::stopThread();
+        ofLogNotice("prThreadedApeak") << "Stopping speak thread";
     }
     
     
@@ -56,13 +59,14 @@ public:
         while(ofThread::isThreadRunning()) {
             if(ofThread::lock()) {
                 
-                if (lastLine != line) {
+                if (lastTimestamp != timestamp) {
+                    ofLogNotice("prThreadedApeak") << "speaking!";
                     speaking = true;
                     ofSystem("osascript -e 'set volume "+ ofToString(volume) +"'");
                     voice = voice.empty() ? "Bruce" : voice;
                     ofSystem("say -v "+ voice +" "+line);
                     speaking = false;
-                    lastLine = line;
+                    lastTimestamp = timestamp;
                 }
                 
                 ofThread::unlock();
@@ -76,7 +80,7 @@ public:
     }
     
 protected:
-    string lastLine;
+    string lastTimestamp;
     
 };
 

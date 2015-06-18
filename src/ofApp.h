@@ -11,6 +11,8 @@
 #include "prHostNameIn.h"
 #include "prHostNames.h"
 #include "prVictim.h"
+#include "prSingleProbeRequest.h"
+#include "prProbeRequestPing.h"
 #include "prMan.h"
 #include "prLight.h"
 #include "prHTTP.h"
@@ -63,10 +65,15 @@ class ofApp : public ofBaseApp {
     
         vector<string> blacklist;
         vector< pair <string, prVictim> > victims;
+        vector<prSingleProbeRequest> singleProbeRequests;
+        vector<prProbeRequestPing> pings;
         bool hideGUI;
         float maxVol;
         float minVol;
         bool mute;
+        bool useSingleProbeRequest;
+        bool useProbeRequestVictimList;
+        bool useProbeRequestPing;
         bool useSecondVoice;
         float maxHue;
         float minHue;
